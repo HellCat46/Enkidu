@@ -1,74 +1,82 @@
 package org.hellcat;
-import javax.sound.sampled.Line;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.Optional;
 
 public class Main {
 
     static FileInputStream csvFile;
     public static void main(String[] args)  {
+
+        // Get Arguments Provided by user
         Optional<ToolArguments> res = ParseArguments(args);
         if(res.isEmpty()){
             printDefaultOutput();
             return;
         }
         final ToolArguments Arguments = res.get();
+
+
+        // Open a Read Stream the CSV File
         int LineNumber = 1;
         try{
             csvFile = new FileInputStream(Arguments.CSVPath);
         }catch (IOException ex){
             System.out.println("Errors while trying to Read the CSV File\n"+ex);
-
             return;
         }
 
+
+        // Parses Out all the Column Name in the CSV File
         Optional<ArrayList<String>> readRes = ReadLine(Arguments.delimiter);
         if(readRes.isEmpty()){
             System.out.println("Unable to Read File At Line"+ LineNumber);
             return;
         }
         ArrayList<String> columns = readRes.get();
-        LineNumber++;
-
         if(columns.isEmpty()){
             System.out.println("Error: Unable to parse any columns from CSV. Make sure you have selected the correct Delimiter");
             return;
         }
+        LineNumber++;
+
+        // Parses Out First Row Elements to Determine Column's Datatype and to obviously get first row
         readRes = ReadLine(Arguments.delimiter);
         if(readRes.isEmpty()){
             System.out.println("Unable to Read File Line");
             return;
         }
         ArrayList<String> RowElements = readRes.get();
-
-        LineNumber++;
         if(RowElements.size() != columns.size()){
             System.out.println("Line "+LineNumber+":Either Too Few or Too many Attributes.");
             return;
         }
+        LineNumber++;
 
-        for (String ele : columns){
-            System.out.print(ele+"\t");
-        }
-
+        // Determines Column's Datatype
         ArrayList<String> ColumnTypes = new ArrayList<>();
         for(String ele : RowElements){
-            if(Parsable.toInt(ele)){
+            if(Parsable.toInt(ele))
                 ColumnTypes.add("int");
-            }else {
+            else if (Parsable.toFloat(ele))
+                ColumnTypes.add("float");
+            else
                 ColumnTypes.add("text");
-            }
         }
 
-        System.out.println();
-        for (String ele : ColumnTypes){
-            System.out.print(ele+"\t");
+        StringBuilder query = new StringBuilder("CREATE TABLE CSV(\""+columns.getFirst()+"\" "+ColumnTypes.getFirst());
+        for(int i =1; i< ColumnTypes.size(); i++){
+            query.append(", \"")
+                    .append(columns.get(i))
+                    .append("\" ")
+                    .append(ColumnTypes.get(i));
         }
+        query.append(");");
+        System.out.print(query);
 //        try(Connection con = DriverManager.getConnection(arguments.connectionString)){
 //
 //        }catch (SQLException ex){
@@ -79,10 +87,20 @@ public class Main {
     private static Optional<ArrayList<String>> ReadLine(ToolArguments.Delimiter delimiter){
         try {
             ArrayList<String> list = new ArrayList<>();
-            int character;
             StringBuilder colname = new StringBuilder();
+
+            int character;
+            boolean openQuote = false;
             while ((character = csvFile.read()) != 10){
-                if(character == delimiter.val){
+                if(character == 32) character=95;
+
+                if(character == 34){
+                    openQuote = !openQuote;
+                    continue;
+                }
+                if(character == delimiter.val && !openQuote){
+                    if(colname.isEmpty()) colname.append("Col").append(list.size()-1);
+
                     list.add(colname.toString());
                     colname = new StringBuilder();
                     continue;
@@ -172,6 +190,14 @@ class ToolArguments {
 }
 
 class Parsable {
+    public static boolean toFloat(String input){
+        try {
+            Float.parseFloat(input);
+            return true;
+        }catch (Exception ignored){
+            return false;
+        }
+    }
     public static boolean toInt(String input){
         try {
             Integer.parseInt(input);
