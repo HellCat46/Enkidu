@@ -14,7 +14,7 @@ public class ToolArguments {
     public String dbPassword = null;
     public DatabaseType dbType = null;
 
-    public ToolArguments(String[] args){
+    public ToolArguments(String[] args, Runnable printDefaultOutput){
         for (String arg : args) {
             if (arg.contains("--csvpath=")) {
                 CSVPath = Arrays.stream(arg.split("--csvpath=")).toList().getLast();
@@ -62,28 +62,24 @@ public class ToolArguments {
                     }
                 }
             } else if (arg.contains("--help")) {
-                Main.printDefaultOutput();
+                printDefaultOutput.run();
                 System.exit(1);
             } else {
                 System.out.println("Unknown Argument: " + arg + "\n");
-                Main.printDefaultOutput();
+                printDefaultOutput.run();
                 System.exit(1);
             }
         }
 
         if (CSVPath == null || delimiter == null || dbIP == null || dbName == null || dbUsername == null || dbPassword == null || dbType == null) {
             System.out.println("Error: Too few Arguments.\n");
-            Main.printDefaultOutput();
+            printDefaultOutput.run();
             System.exit(1);
         }
 
 
         try(Connection dbCon = Enkidu.createConnection(this)) {
-            if (dbCon.isValid(30))
-                System.out.println("Success");
-            else {
-                System.out.println("Failed");
-            }
+            if (!dbCon.isValid(30)) System.out.println("Failed");
         } catch (SQLException ex) {
             System.out.println("Unable to connect to the Database.\n" + ex.getMessage());
             System.exit(1);
