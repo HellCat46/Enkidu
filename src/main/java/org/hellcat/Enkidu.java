@@ -5,7 +5,6 @@ import java.util.ArrayList;
 import java.io.EOFException;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.util.IllegalFormatException;
 
 public class Enkidu {
     Connection dbCon;
@@ -17,6 +16,7 @@ public class Enkidu {
     ArrayList<String> columnTypes = new ArrayList<>();
     ArrayList<String> row = new ArrayList<>();
     ToolArguments.Delimiter delimiter;
+    char columnQuote;
 
     public Enkidu(ToolArguments args, String tblName) throws RuntimeException
     {
@@ -37,6 +37,14 @@ public class Enkidu {
         }
 
         delimiter = args.delimiter;
+        switch(args.dbType){
+            case MSSQL -> columnQuote = '"';
+            case MYSQL -> columnQuote = '`';
+            default -> {
+                return;
+            }
+        }
+
         this.tblName = tblName;
 
         GetColumns();
@@ -69,11 +77,13 @@ public class Enkidu {
     }
 
     private void CreateTable(String tblName) throws SQLException {
-        StringBuilder queryBuilder = new StringBuilder("CREATE TABLE " + tblName + "(\"" + columns.getFirst() + "\" " + columnTypes.getFirst());
+        StringBuilder queryBuilder = new StringBuilder(String.format("CREATE TABLE %s( %s%s%s %s%n", tblName, columnQuote, columns.getFirst(), columnQuote, columnTypes.getFirst()));
         for (int i = 1; i < columnTypes.size(); i++) {
-            queryBuilder.append(", \"")
+            queryBuilder.append(", ")
+                    .append(columnQuote)
                     .append(columns.get(i))
-                    .append("\" ")
+                    .append(columnQuote)
+                    .append(" ")
                     .append(columnTypes.get(i));
         }
         queryBuilder.append(");");
@@ -138,7 +148,9 @@ public class Enkidu {
             boolean openQuote = false;
             StringBuilder colVal = new StringBuilder();
             while ((character = csvFile.read()) != 10 ) {
-                if (character == -1) throw new EOFException("End of File");
+                if (character == -1) {
+                    throw new EOFException("End of File");
+                }
 
                 if (character == 34) {
                     openQuote = !openQuote;
@@ -155,7 +167,10 @@ public class Enkidu {
                 colVal.append((char) character);
             }
             if (!colVal.isEmpty()) row.add(colVal.toString());
-        } catch (Exception ex) {
+        }catch (EOFException ex){
+            throw ex;
+        }
+        catch (Exception ex) {
             throw new RuntimeException("Unexpected Error while trying to parse row: "+ex.getMessage());
         }
     }
@@ -166,7 +181,7 @@ public class Enkidu {
         for (int i = 0; i < row.size(); i++) {
             if (row.get(i).isEmpty()) continue;
 
-            queryTable.append("\"").append(columns.get(i)).append("\"").append(",");
+            queryTable.append(columnQuote).append(columns.get(i)).append(columnQuote).append(",");
             if (columnTypes.get(i).equals("text")) {
                 queryValues.append("'").append(row.get(i)).append("',");
             } else {
@@ -192,7 +207,6 @@ public class Enkidu {
 
     public static Connection createConnection(ToolArguments arguments) throws ClassNotFoundException, SQLException,RuntimeException {
         Connection con;
-
         switch (arguments.dbType){
             case MSSQL -> {
                 String DbURL = String.format("jdbc:sqlserver://%s;database=%s;trustServerCertificate=true", arguments.dbIP, arguments.dbName);
@@ -202,8 +216,7 @@ public class Enkidu {
             }
             case MYSQL ->  {
                 String DbURL = String.format("jdbc:mysql://%s/%s?user=%s&password=%s", arguments.dbIP, arguments.dbName, arguments.dbUsername, arguments.dbPassword);
-
-                Class.forName("com.mysql.jdbc.Driver");
+                Class.forName("com.mysql.cj.jdbc.Driver");
                 con = DriverManager.getConnection(DbURL);
             }
             case POSTGRESQL -> {
