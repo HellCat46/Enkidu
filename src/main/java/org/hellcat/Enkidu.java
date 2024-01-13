@@ -1,15 +1,14 @@
 package org.hellcat;
 
+import java.io.*;
 import java.sql.*;
 import java.util.ArrayList;
-import java.io.EOFException;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 
 public class Enkidu {
     Connection dbCon;
     Statement dbStatement;
     FileInputStream csvFile;
+    Logging logger;
     String tblName;
     int LineNumber = 1;
     ArrayList<String> columns = new ArrayList<>();
@@ -18,65 +17,105 @@ public class Enkidu {
     ToolArguments.Delimiter delimiter;
     char columnQuote;
 
-    public Enkidu(ToolArguments args, String tblName) throws RuntimeException
+    public Enkidu(ToolArguments args, String tblName, Logging logger) throws RuntimeException
     {
+        this.logger = logger;
+        logger.Write("Entered in Enkidu Constructor", Logging.Type.Normal, "Enkidu Constructor");
+
+
         try {
             csvFile = new FileInputStream(args.CSVPath);
             dbCon = Enkidu.createConnection(args);
-        }catch (FileNotFoundException ex){
+        }
+        catch (FileNotFoundException ex){
+            logger.Write(ex.toString(), Logging.Type.Error, "Enkidu Constructor");
+            logger.BackTrace(ex.getStackTrace());
             throw new RuntimeException("Unable to Open the CSV File: "+ex.getMessage());
-        }catch (ClassNotFoundException ex){
+        }
+        catch (ClassNotFoundException ex){
+            logger.Write(ex.toString(), Logging.Type.Error, "Enkidu Constructor");
+            logger.BackTrace(ex.getStackTrace());
             throw new RuntimeException("Unable to Load Database Drivers: "+ex.getMessage());
-        }catch (SQLException ex){
+        }
+        catch (SQLException ex){
+            logger.Write(ex.toString(), Logging.Type.Error, "Enkidu Constructor");
+            logger.BackTrace(ex.getStackTrace());
             throw new RuntimeException("Unable to Open a Database Connection"+ex.getMessage());
         }
+        logger.Write("Opened CSV File and Database Connection", Logging.Type.Normal, "Enkidu Constructor");
+
+
         try {
             dbStatement = dbCon.createStatement();
         }catch (SQLException ex){
+            logger.Write(ex.toString(), Logging.Type.Error, "Enkidu Constructor");
+            logger.BackTrace(ex.getStackTrace());
             throw new RuntimeException("Unable to Open a Statement to execute SQL queries"+ex.getMessage());
         }
+        logger.Write("Created Statement Object to run SQL Commands", Logging.Type.Normal, "Enkidu Constructor");
+
 
         delimiter = args.delimiter;
         switch(args.dbType){
-            case MSSQL -> columnQuote = '"';
+            case MSSQL, POSTGRESQL -> columnQuote = '"';
             case MYSQL -> columnQuote = '`';
-            default -> {
-                return;
-            }
         }
-
         this.tblName = tblName;
 
         GetColumns();
+        logger.Write("Parsed All the Columns from CSV", Logging.Type.Normal, "Enkidu Constructor");
+
+
         try {
         ReadRow();
         } catch (EOFException ex) {
+            logger.Write(ex.toString(), Logging.Type.Error, "Enkidu Constructor");
+            logger.BackTrace(ex.getStackTrace());
             throw new RuntimeException("File doesn't have any data: "+ ex.getMessage());
         } catch (Exception ex) {
+            logger.Write(ex.toString(), Logging.Type.Error, "Enkidu Constructor");
+            logger.BackTrace(ex.getStackTrace());
             throw new RuntimeException(ex.getMessage());
         }
+        logger.Write("Parsed First Row of Data for Determine Column Types", Logging.Type.Normal, "Enkidu Constructor");
 
-        if(columns.size() != row.size()) throw  new RuntimeException(String.format("Line %d has Either Too Few or Too many Attributes", LineNumber));
+
+        if(columns.size() != row.size()) {
+            logger.Write("Too Few or Too many Attributes", Logging.Type.Error, "Enkidu Constructor");
+            throw new RuntimeException(String.format("Line %d has Either Too Few or Too many Attributes", LineNumber));
+        }
 
         DetermineColumnTypes();
+        logger.Write("Determined Columns Datatype", Logging.Type.Normal, "Enkidu Constructor");
         try {
             CreateTable(tblName);
         }
         catch (SQLException ex){
+            logger.Write(ex.toString(), Logging.Type.Error, "Enkidu Constructor");
+            logger.BackTrace(ex.getStackTrace());
             throw new RuntimeException("Failed to Create Table into the Database: "+ex.getMessage());
         }
+        logger.Write("Created Table in Database", Logging.Type.Normal, "Enkidu Constructor");
 
         try {
             InsertRow();
             System.out.println("Successfully Inserted Row into the Database");
         } catch (SQLException ex) {
+            logger.Write(ex.toString(), Logging.Type.Error, "Enkidu Constructor");
+            logger.BackTrace(ex.getStackTrace());
             System.out.println(ex.getMessage());
         } catch (Exception ex) {
+            logger.Write(ex.toString(), Logging.Type.Error, "Enkidu Constructor");
+            logger.BackTrace(ex.getStackTrace());
             throw new RuntimeException(ex.getMessage());
         }
+        logger.Write("Inserted First Row in Database", Logging.Type.Normal, "Enkidu Constructor");
+
+        logger.Write("Leaves Enkidu Constructor", Logging.Type.Normal, "Enkidu Constructor");
     }
 
     private void CreateTable(String tblName) throws SQLException {
+        logger.Write("Started building Create Table Query", Logging.Type.Normal, "CreateTable");
         StringBuilder queryBuilder = new StringBuilder(String.format("CREATE TABLE %s( %s%s%s %s%n", tblName, columnQuote, columns.getFirst(), columnQuote, columnTypes.getFirst()));
         for (int i = 1; i < columnTypes.size(); i++) {
             queryBuilder.append(", ")
@@ -87,12 +126,15 @@ public class Enkidu {
                     .append(columnTypes.get(i));
         }
         queryBuilder.append(");");
+        logger.Write("Successfully built Insert Query", Logging.Type.Normal, "InsertRow");
 
         String query = queryBuilder.toString();
         dbStatement.executeUpdate(query);
+        logger.Write("Successfully Create Table into the Database", Logging.Type.Normal, "InsertRow");
     }
 
     private void GetColumns() throws RuntimeException {
+        logger.Write("Started Parsing Column Names", Logging.Type.Normal, "GetColumns");
         try {
             StringBuilder colname = new StringBuilder();
             int character;
@@ -121,8 +163,11 @@ public class Enkidu {
 
             LineNumber++;
         } catch (Exception ex) {
+            logger.Write(ex.toString(), Logging.Type.Error, "GetColumns");
+
             throw new RuntimeException("Unexpected Error while trying to parse column names: "+ ex.getMessage());
         }
+        logger.Write("Successfully Parsed Column Names", Logging.Type.Normal, "GetColumns");
     }
 
     private void DetermineColumnTypes(){
@@ -139,7 +184,7 @@ public class Enkidu {
 
 
     public void ReadRow() throws EOFException, RuntimeException {
-
+        logger.Write("Started Parsing Row Data", Logging.Type.Normal, "ReadRow");
         LineNumber++;
         try {
             row = new ArrayList<>();
@@ -171,11 +216,21 @@ public class Enkidu {
             throw ex;
         }
         catch (Exception ex) {
+            logger.Write(ex.toString(), Logging.Type.Error, "ReadRow");
+
             throw new RuntimeException("Unexpected Error while trying to parse row: "+ex.getMessage());
         }
+        logger.Write("Started Parsing Column Names", Logging.Type.Normal, "GetColumns");
     }
 
     private void InsertRow() throws SQLException, RuntimeException {
+        logger.Write("Started building Insert Query", Logging.Type.Normal, "InsertRow");
+
+        if(row.isEmpty()){
+            logger.Write("Row is Empty", Logging.Type.Warning, "InsertRow");
+            return;
+        }
+
         StringBuilder queryTable = new StringBuilder("INSERT INTO " + tblName + "(");
         StringBuilder queryValues = new StringBuilder("VALUES(");
         for (int i = 0; i < row.size(); i++) {
@@ -192,12 +247,16 @@ public class Enkidu {
         queryTable.append(") ");
         queryValues.deleteCharAt(queryValues.length() - 1);
         queryValues.append(");");
+        logger.Write("Successfully built Insert Query", Logging.Type.Normal, "InsertRow");
 
         try {
             dbStatement.executeUpdate(queryTable.toString() + queryValues);
         }catch (SQLException ex){
+            logger.Write(ex.toString(), Logging.Type.Error, "Insert Row");
+
             throw new SQLException("Failed to Insert Lineno "+LineNumber+" Into the Table. Skipping...\n" + ex.getMessage());
         }
+        logger.Write("Inserted Row "+(LineNumber-1)+" into the Database", Logging.Type.Normal, "InsertRow");
     }
 
     public void InsertData() throws EOFException, SQLException {

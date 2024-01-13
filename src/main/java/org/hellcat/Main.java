@@ -1,23 +1,26 @@
 package org.hellcat;
 
+import java.io.IOException;
 import java.sql.*;
 import java.util.Scanner;
 import java.io.EOFException;
 
 public class Main {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
+        Logging logger = new Logging();
+
         Scanner sc = new Scanner(System.in);
         ToolArguments Arguments = new ToolArguments(args, Main::printDefaultOutput);
 
         try {
             System.out.print("Enter name of table (Spaces Not Allowed): ");
             String tblName = sc.next();
-            Enkidu app = new Enkidu(Arguments, tblName);
+            Enkidu app = new Enkidu(Arguments, tblName, logger);
 
+            System.out.println("Started Inserting Data");
             while (true) {
                 try {
                     app.InsertData();
-                    System.out.println("Successfully Inserted Row into the Database");
                 } catch (SQLException ex) {
                     System.out.println(ex.getMessage());
                 } catch (EOFException ex) {
@@ -32,7 +35,7 @@ public class Main {
         }
         System.out.println("Successfully Inserted CSV File Data to Database");
 
-
+        logger.Close();
     }
 
     private static void printDefaultOutput() {
